@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0"/>
+  <title>B.O.B. - Block Or Build</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    .controls {
+      margin: 15px 0;
+    }
+    input, select {
+      padding: 5px;
+      width: 100px;
+      text-align: center;
+    }
+    button {
+      padding: 5px 10px;
+      margin: 0 5px;
+    }
+    .grid {
+      display: inline-block;
+      margin: 20px 0;
+    }
+    .row {
+      display: flex;
+    }
+    .cell {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .score {
+      font-size: 18px;
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    .status {
+      margin-top: 10px;
+      color: #555;
+      font-style: italic;
+    }
+    #difficultyRow {
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>B.O.B. - Block Or Build</h1>
+  <h3>Build more 2 by 2 squares
+    than your opponent.</h3>
+
+  <div class="controls">
+    <label>Mode:</label>
+    <select id="mode">
+      <option value="2p">2 Player</option>
+      <option value="1p">1 Player (vs AI)</option>
+    </select>
+    <label>Grid Size (6-20):</label>
+    <input type="number" id="size"
+      min="6" max="20" value="8" />
+    <button onclick="initGame()">
+      Start Game
+    </button>
+  </div>
+
+  <div class="controls" id="difficultyRow"
+    style="display:none;">
+    <label>Difficulty (1-10):</label>
+    <select id="difficulty">
+      <option value="1">1 - Very Easy</option>
+      <option value="2">2 - Easy</option>
+      <option value="3">3 - Easy+</option>
+      <option value="4">4 - Medium</option>
+      <option value="5">5 - Medium+</option>
+      <option value="6">6 - Hard</option>
+      <option value="7">7 - Hard+</option>
+      <option value="8">8 - Expert</option>
+      <option value="9">9 - Master</option>
+      <option value="10">10 - Perfect</option>
+    </select>
+  </div>
+
+  <div class="score">
+    <span id="scoreX">Player X: 0</span> |
+    <span id="scoreO">Player O: 0</span>
+  </div>
+
+  <div id="gridContainer" class="grid"></div>
+
+  <div class="status" id="status">
+    Player X's turn
+  </div>
+  <script>
+    let n = 8;
+    let board = [];
+    let currentPlayer = 'X';
+    let scores = { X: 0, O: 0 };
+    let gameActive = false;
+    let onePlayer = false;
+    let difficulty = 5;
+    let aiThinking = false;
+
+    document
+      .getElementById('mode')
+      .addEventListener('change', function() {
+        const row = document
+          .getElementById('difficultyRow');
+        if (this.value === '1p') {
+          row.style.display = 'block';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+    function initGame() {
+      n = parseInt(
+        document.getElementById('size').value
+      );
+      if (n < 6 || n > 20) {
+        alert(
+          "Please enter a number between 6 and 20."
+        );
+        return;
+      }
+
+      onePlayer = document
+        .getElementById('mode').value === '1p';
+      if (onePlayer) {
+        difficulty = parseInt(
+          document
+            .getElementById('difficulty').value
+        );
+      }
+
+      const container =
+        document
+          .getElementById('gridContainer');
+      container.innerHTML = '';
+
+      board = Array(n)
+        .fill().map(() => Array(n).fill(''));
+      scores = { X: 0, O: 0 };
+      currentPlayer = 'X';
+      gameActive = true;
+      aiThinking = false;
+
+      const labelO =
+        onePlayer ? 'AI' : 'Player O';
+      const labelX = 'Player X';
+      document
+        .getElementById('scoreX')
+        .textContent = `${labelX}: 0`;
+      document
+        .getElementById('scoreO')
+        .textContent = `${labelO}: 0`;
+      document
+        .getElementById('status')
+        .textContent = `Player X's turn`;
+
+      for (let i = 0; i < n; i++) {
+        const row =
+          document.createElement('div');
+        row.className = 'row';
+        for (let j = 0; j < n; j++) {
+          const cell =
+            document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.row = i;
+          cell.dataset.col = j;
+          cell
+            .addEventListener(
+              'click', handleCellClick
+            );
+          row.appendChild(cell);
+        }
+        container.appendChild(row);
+      }
+    }
+
+    function handleCellClick(e) {
+      if (!gameActive || aiThinking) return;
+      if (onePlayer && currentPlayer === 'O')
+        return;
+
+      const row =
+        parseInt(e.target.dataset.row);
+      const col =
+        parseInt(e.target.dataset.col);
+
+      if (board[row][col] !== '') return;
+
+      makeMove(row, col, currentPlayer);
+      endTurn();
+    }
+
+    function makeMove(row, col, player) {
+      board[row][col] = player;
+      setCellText(row, col, player);
+      const newSquares =
+        countNew2x2Squares(row, col, player);
+      scores[player] += newSquares * 10;
+
+      const label = player === 'O'
+        && onePlayer ? 'AI'
+        : `Player ${player}`;
+      document
+        .getElementById(`score${player}`)
+        .textContent =
+          `${label}: ${scores[player]}`;
+    }
+
+    function setCellText(row, col, player) {
+      const rows =
+        document.querySelectorAll('.row');
+      const cells =
+        rows[row].querySelectorAll('.cell');
+      cells[col].textContent = player;
+    }
+
+    function endTurn() {
+      if (!canStillScore()) {
+        endGame();
+        return;
+      }
+      currentPlayer =
+        currentPlayer === 'X' ? 'O' : 'X';
+      const label = currentPlayer === 'O'
+        && onePlayer ? 'AI'
+        : `Player ${currentPlayer}`;
+      document
+        .getElementById('status')
+        .textContent =
+          `${label}'s turn`;
+
+      if (onePlayer && currentPlayer === 'O') {
+        aiThinking = true;
+        setTimeout(aiMove, 400);
+      }
+    }
+
+    function aiMove() {
+      if (!gameActive || currentPlayer !== 'O') {
+        aiThinking = false;
+        return;
+      }
+      const move = getAIMove();
+      aiThinking = false;
+
+      if (move) {
+        makeMove(
+          move.row, move.col, 'O'
+        );
+        endTurn();
+      }
+    }
+
+    // --- AI Logic ---
+
+    function getAIMove() {
+      const emptyCells = getEmptyCells();
+      if (emptyCells.length === 0) return null;
+
+      // Levels 1-7: single-move
+      // evaluation with randomness
+      if (difficulty <= 7) {
+        const randomChance =
+          (8 - difficulty) / 8.0;
+        if (
+          Math.random() < randomChance
+          && emptyCells.length > 1
+        ) {
+          const idx = Math.floor(
+            Math.random()
+            * emptyCells.length
+          );
+          return {
+            row: emptyCells[idx][0],
+            col: emptyCells[idx][1]
+          };
+        }
+        let best = -Infinity;
+        let bestMv = emptyCells[0];
+        for (const [r, c] of emptyCells) {
+          const s =
+            evaluateMove(r, c, 'O');
+          if (s > best) {
+            best = s;
+            bestMv = [r, c];
+          }
+        }
+        return {
+          row: bestMv[0],
+          col: bestMv[1]
+        };
+      }
+
+      // Levels 8-10: lookahead search
+      const depth =
+        difficulty === 8 ? 1 : 2;
+      return searchAhead(
+        board, 'O', depth, emptyCells
+      );
+    }
+
+    function getEmptyCells() {
+      const cells = [];
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          if (board[i][j] === '')
+            cells.push([i, j]);
+        }
+      }
+      return cells;
+    }
+
+    function searchAhead(
+      b, player, depth, empties
+    ) {
+      let bestScore = -Infinity;
+      let bestMove = null;
+
+      for (const [r, c] of empties) {
+        const b2 = copyBoard(b);
+        b2[r][c] = player;
+        let score =
+          evaluateFullBoard(b2, player);
+
+        if (depth > 0) {
+          const opp =
+            player === 'O' ? 'X' : 'O';
+          const oppBest =
+            findBestReply(
+              b2, opp, depth - 1
+            );
+          score -= oppBest * 0.9;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = [r, c];
+        }
+      }
+
+      return {
+        row: bestMove[0],
+        col: bestMove[1]
+      };
+    }
+
+    function findBestReply(
+      b, player, depth
+    ) {
+      let best = -Infinity;
+      const empties = [];
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          if (b[i][j] === '')
+            empties.push([i, j]);
+        }
+      }
+
+      if (empties.length === 0)
+        return 0;
+
+      for (const [r, c] of empties) {
+        const b2 = copyBoard(b);
+        b2[r][c] = player;
+        let s =
+          evaluateFullBoard(b2, player);
+
+        if (depth > 0) {
+          const next =
+            player === 'O' ? 'X' : 'O';
+          const reply =
+            findBestReply(
+              b2, next, depth - 1
+            );
+          s -= reply * 0.9;
+        }
+
+        if (s > best) best = s;
+      }
+      return best;
+    }
+
+    function copyBoard(b) {
+      return b.map(row => row.slice());
+    }
+
+    function evaluateFullBoard(
+      b, player
+    ) {
+      let score = 0;
+      const opp =
+        player === 'O' ? 'X' : 'O';
+
+      for (let i = 0; i < n - 1; i++) {
+        for (let j = 0; j < n - 1; j++) {
+          const vals = [
+            b[i][j],
+            b[i+1][j],
+            b[i][j+1],
+            b[i+1][j+1]
+          ];
+
+          if (
+            vals.every(v => v === player)
+          )
+            score += 100;
+          else if (
+            vals.every(v => v === opp)
+          )
+            score -= 100;
+
+          const p = vals
+            .filter(v => v === player)
+            .length;
+          const o = vals
+            .filter(v => v === opp)
+            .length;
+
+          if (p === 3 && o === 0)
+            score += 40;
+          if (o === 3 && p === 0)
+            score -= 40;
+          if (
+            p === 2 && o === 0
+            && vals.includes('')
+          )
+            score += 12;
+          if (
+            o === 2 && p === 0
+            && vals.includes('')
+          )
+            score -= 12;
+        }
+      }
+
+      const center = (n - 1) / 2;
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          if (b[i][j] === player) {
+            const dist =
+              Math.abs(i - center)
+              + Math.abs(j - center);
+            score +=
+              (n - dist) * 0.5;
+          }
+        }
+      }
+
+      return score;
+    }
+
+    function evaluateMove(
+      row, col, player
+    ) {
+      let score = 0;
+      const opp =
+        player === 'O' ? 'X' : 'O';
+
+      for (
+        let i = Math.max(0, row - 1);
+        i <= Math.min(n - 2, row); i++
+      ) {
+        for (
+          let j = Math.max(0, col - 1);
+          j <= Math.min(n - 2, col); j++
+        ) {
+          const cells = [
+            [i, j],
+            [i+1, j],
+            [i, j+1],
+            [i+1, j+1]
+          ];
+
+          const wouldComplete =
+            cells.every(
+              ([r, c2]) =>
+                r === row && c2 === col
+                || board[r][c2] === player
+            );
+          if (wouldComplete)
+            score += 100;
+
+          const others = cells
+            .filter(
+              ([r, c2]) =>
+                !(r === row && c2 === col)
+            );
+          const oAll = others
+            .every(
+              ([r, c2]) =>
+                board[r][c2] === opp
+            );
+          if (oAll) score += 80;
+
+          const pCount = others
+            .filter(
+              ([r, c2]) =>
+                board[r][c2] === player
+            ).length;
+          const eCount = others
+            .filter(
+              ([r, c2]) =>
+                board[r][c2] === ''
+            ).length;
+          const oCount = others
+            .filter(
+              ([r, c2]) =>
+                board[r][c2] === opp
+            ).length;
+
+          if (
+            pCount === 2 && eCount === 1
+          )
+            score += 30;
+          if (
+            pCount === 1 && eCount === 2
+          )
+            score += 10;
+          if (
+            oCount === 2 && eCount === 1
+          )
+            score += 25;
+          if (
+            oCount === 1 && eCount === 2
+          )
+            score += 8;
+        }
+      }
+
+      const center = (n - 1) / 2;
+      const dist =
+        Math.abs(row - center)
+        + Math.abs(col - center);
+      score += Math.max(
+        0, (n - dist) - (n - 1)
+      );
+      return score;
+    }
+
+    // --- Game Logic ---
+
+    function countNew2x2Squares(
+      row, col, player
+    ) {
+      let count = 0;
+      for (
+        let i = Math.max(0, row - 1);
+        i <= Math.min(n - 2, row); i++
+      ) {
+        for (
+          let j = Math.max(0, col - 1);
+          j <= Math.min(n - 2, col); j++
+        ) {
+          if (
+            board[i][j] === player &&
+            board[i+1][j] === player &&
+            board[i][j+1] === player &&
+            board[i+1][j+1] === player
+          ) {
+            count++;
+          }
+        }
+      }
+      return count;
+    }
+
+    function canStillScore() {
+      for (let i = 0; i < n - 1; i++) {
+        for (let j = 0; j < n - 1; j++) {
+          const cells = [
+            [i, j],
+            [i+1, j],
+            [i, j+1],
+            [i+1, j+1]
+          ];
+          const values = cells
+            .map(
+              ([r, c]) =>
+                board[r][c]
+            );
+          const emptyCount =
+            values
+            .filter(v => v === '')
+            .length;
+          if (emptyCount === 0)
+            continue;
+
+          const nonEmpty = values
+            .filter(v => v !== '');
+          if (nonEmpty.length === 0)
+            continue;
+          if (
+            nonEmpty.every(
+              v => v === nonEmpty[0]
+            )
+          ) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function endGame() {
+      gameActive = false;
+      const scoreX = scores.X;
+      const scoreO = scores.O;
+      const labelO =
+        onePlayer ? 'AI' : 'Player O';
+
+      if (scoreX > scoreO) {
+        document
+          .getElementById('status')
+          .textContent =
+            `Game over! Player X wins `
+            + `with ${scoreX} points.`;
+      } else if (scoreO > scoreX) {
+        document
+          .getElementById('status')
+          .textContent =
+            `Game over! ${labelO} `
+            + `wins with ${scoreO} `
+            + `points.`;
+      } else {
+        document
+          .getElementById('status')
+          .textContent =
+            "Game over! It's a draw.";
+      }
+    }
+
+    window.onload = () => {
+      initGame();
+    };
+  </script>
+
+</body>
+</html>
+
